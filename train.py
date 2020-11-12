@@ -8,6 +8,7 @@ import torch.optim as optim
 import pandas as pd
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader 
+from torch.utils.data.sampler import WeightedRandomSampler
 import torchvision.models as models
 from torchvision import transforms
 from tensorboardX import SummaryWriter
@@ -17,6 +18,8 @@ from emotic_dataset import Emotic_PreDataset, Emotic_CSVDataset
 from loss import DiscreteLoss, ContinuousLoss_SL1, ContinuousLoss_L2
 from prepare_models import prep_models
 from test import test_data
+from utils import get_weight_of_samples
+
 
 def append_log_to_file(file_path, line):
     with open(file_path, 'a') as opened_file:
@@ -184,7 +187,7 @@ def save_checkpoint(emotic_model, model_context, model_body, optimizer, epoch,
     model_body.to("cpu")
     cp_path = os.path.join(model_path, 'checkpoint_ep{}.pth'.format(epoch+1))
     state = {
-        'archs': 'mlp resnet18 resnet18',
+        'archs': 'mlp {} {}'.format(type(model_context), type(model_body)),
         'epoch': epoch + 1,
         'state_dicts':{
             'emotic_model': emotic_model.state_dict(),
@@ -244,10 +247,16 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     train_dataset = Emotic_CSVDataset(train_df, cat2ind, train_transform, 
                       context_norm, body_norm, args.data_path)
 
+    sample_weights = get_weight_of_samples(train_df, args.weight_classes_file, 
+                        cat2ind)
+
+    balanced_sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+
     val_dataset = Emotic_CSVDataset(val_df, cat2ind, test_transform, 
                       context_norm, body_norm, args.data_path)
     
-    train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, args.batch_size, 
+                                sampler=balanced_sampler)
     val_loader = DataLoader(val_dataset, args.batch_size, shuffle=False)
 
     print ('train loader ', len(train_loader), 'val loader ', len(val_loader))
@@ -263,6 +272,11 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     model_context = nn.Sequential(*(list(model_context.children())[:-1]))
     model_body = nn.Sequential(*(list(model_body.children())[:-1]))
 
+    opt = optim.Adam((list(emotic_model.parameters()) + \
+                        list(model_context.parameters()) + \
+                        list(model_body.parameters())), 
+                        lr=args.learning_rate, weight_decay=args.weight_decay)
+
     if args.resume_from_ep > 0:
         cp_path = os.path.join(model_path, 'checkpoint_ep{}.pth'.format(args.resume_from_ep))
         cp = torch.load(cp_path)
@@ -270,7 +284,7 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
         emotic_model.load_state_dict(state_dicts['emotic_model'])
         model_context.load_state_dict(state_dicts['context_model'])
         model_body.load_state_dict(state_dicts['body_model'])
-
+        opt.load_state_dict(cp['optimizer'])
 
     for param in emotic_model.parameters():
         param.requires_grad = True
@@ -281,10 +295,6 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     
     device = torch.device("cuda:%s" %(str(args.gpu)) if torch.cuda.is_available() \
                             else "cpu")
-    opt = optim.Adam((list(emotic_model.parameters()) + \
-                        list(model_context.parameters()) + \
-                        list(model_body.parameters())), 
-                        lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # scheduler = StepLR(opt, step_size=7, gamma=0.1)
     scheduler_args = {

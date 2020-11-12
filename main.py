@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=15)
     parser.add_argument('--batch_size', type=int, default=52) # use batch size = double(categorical emotion classes)
     parser.add_argument('--resume_from_ep', type=int, default=-1)
+    parser.add_argument('--class_weights', type=str, default='meta_data/class_weights.npy')
+
     # Generate args
     args = parser.parse_args()
     return args

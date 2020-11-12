@@ -2,6 +2,8 @@ import os
 import json
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
+import ast
 from PIL import Image
 
 class MetricTracker:
@@ -68,4 +70,16 @@ def plot_train_val_loss(log_file, out_file):
     plt.legend(loc='upper right')
     plt.savefig(out_file)
     print('Plot train and val loss to {}'.format(out_file))
+
+def get_weight_of_samples(train_df, weight_class_file, cat2idx):
+    weight_class = np.load(weight_class_file)
+    sample_weights = []
+    for labels_str in train_df['Categorical_Labels']:
+        labels = ast.literal_eval(labels_str)
+        weights = 0.0
+        for label in labels:
+            weights += weight_class[cat2idx[label]]
+        sample_weights.append(weights)
+    
+    return sample_weights
 
