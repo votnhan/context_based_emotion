@@ -76,7 +76,7 @@ def yolo_infer(images_list, result_path, model_path, context_norm, body_norm, in
 
   threshold_path = os.path.join(result_path, 'val_thresholds.npy')
   if os.path.exists(threshold_path):
-    thresholds = torch.FloatTensor(np.load()).to(device)
+    thresholds = torch.FloatTensor(np.load(threshold_path)).to(device)
   else:
     thresholds = None
   

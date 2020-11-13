@@ -47,10 +47,6 @@ def train_data(opt, scheduler, models, device, train_loader, val_loader,
     
     model_context, model_body, emotic_model = models
 
-    emotic_model.to(device)
-    model_context.to(device)
-    model_body.to(device)
-
     print ('starting training')
     log_train_path = os.path.join(train_log_path, 'train.txt')
     log_val_path = os.path.join(val_log_path, 'val.txt')
@@ -241,13 +237,16 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     for k, v in ind2cat.items():
       cat2ind[v] = k
 
+    device = torch.device("cuda:%s" %(str(args.gpu)) if torch.cuda.is_available() \
+                            else "cpu")
+
     train_df = pd.read_csv(os.path.join(args.data_path, 'train.csv'))
     val_df = pd.read_csv(os.path.join(args.data_path, 'val.csv'))
 
     train_dataset = Emotic_CSVDataset(train_df, cat2ind, train_transform, 
                       context_norm, body_norm, args.data_path)
 
-    sample_weights = get_weight_of_samples(train_df, args.weight_classes_file, 
+    sample_weights = get_weight_of_samples(train_df, args.class_weights, 
                         cat2ind)
 
     balanced_sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
@@ -272,6 +271,10 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     model_context = nn.Sequential(*(list(model_context.children())[:-1]))
     model_body = nn.Sequential(*(list(model_body.children())[:-1]))
 
+    emotic_model.to(device)
+    model_context.to(device)
+    model_body.to(device)
+    
     opt = optim.Adam((list(emotic_model.parameters()) + \
                         list(model_context.parameters()) + \
                         list(model_body.parameters())), 
@@ -293,8 +296,6 @@ def train_emotic(result_path, model_path, train_log_path, val_log_path, ind2cat,
     for param in model_body.parameters():
         param.requires_grad = True
     
-    device = torch.device("cuda:%s" %(str(args.gpu)) if torch.cuda.is_available() \
-                            else "cpu")
 
     # scheduler = StepLR(opt, step_size=7, gamma=0.1)
     scheduler_args = {
